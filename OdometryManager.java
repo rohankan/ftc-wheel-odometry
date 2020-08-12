@@ -9,15 +9,37 @@ public class OdometryManager
     private double theta;
 
     // Encoder classes.
-    private Encoder leftEncoder;
-    private Encoder rightEncoder;
-    private Encoder strafeEncoder;
+    private EncoderManager leftEncoder;
+    private EncoderManager rightEncoder;
+    private EncoderManager strafeEncoder;
     double strafeEncoderDistancePerRobotRotation;
 
-    // Used to maintain state between updates.
-    private double prevLeftDistance = 0;
-    private double prevRightDistance = 0;
-    private double prevStrafeDistance = 0;
+    private class EncoderManager
+    {
+        Encoder encoder;
+        double prevDistance = 0;
+
+        /**
+         * Handles encoder operations relevant to odometry.
+         * @param encoder Encoder instance
+         */
+        public EncoderManager(Encoder encoder)
+        {
+            this.encoder = encoder;
+        }
+
+        /**
+         * Returns distance change since last method call.
+         * @return Distance change
+         */
+        public getDistanceChange()
+        {
+            double distance = encoder.getDistance();
+            double change = distance - prevDistance;
+            prevDistance = Distance;
+            return change;
+        }
+    }
 
     /**
      * Returns current (x, y) location
@@ -52,9 +74,9 @@ public class OdometryManager
                            Encoder strafeEncoder, double robotWidth,
                            double strafeEncoderDistancePerRobotRotation)
     {
-        this.leftEncoder = leftEncoder;
-        this.rightEncoder = rightEncoder;
-        this.strafeEncoder = strafeEncoder;
+        this.leftEncoder = EncoderManager(leftEncoder);
+        this.rightEncoder = EncoderManager(rightEncoder);
+        this.strafeEncoder = EncoderManager(strafeEncoder);
         this.coords = initialLocation;
         this.theta = initialTheta;
         this.robotWidth = robotWidth;
@@ -86,36 +108,43 @@ public class OdometryManager
     public void update()
     {
         // Setting d1, or the change in left encoder distance.
-        double leftDistance = leftEncoder.getDistance();
-        double d1 = leftDistance - prevLeftDistance;
-        prevLeftDistance = leftDistance;
+        double d1 = leftEncoder.getDistanceChange();
 
         // Setting d2, or the change in right encoder distance.
-        double rightDistance = rightEncoder.getDistance();
-        double d2 = rightDistance - prevRightDistance;
-        prevRightDistance = rightDistance;
+        double d2 = rightEncoder.getDistanceChange();
 
-        // Averaging vertical encoder distances.
-        double d = (d1 + d2) / 2;
+        double dx1;
+        double dy1;
 
-        // Calculating angle change.
-        double dTheta = (d2 - d1) / robotWidth;
+        // If we ran the code in the else when d1 == d2,
+        // theta would become 0, and the radius would be infinite.
+        // Therefore, we have to handle this edge case separately.
+        if (d1 == d2) {
+            // For d1 to equal d2, the vertical encoders move in
+            // a straight line.
+            dx1 = 0;
+            dy1 = d1;
+        } else {
+            // Averaging vertical encoder distances.
+            double d = (d1 + d2) / 2;
 
-        // Updating global orientation.
-        theta += dTheta;
+            // Calculating angle change.
+            double dTheta = (d2 - d1) / robotWidth;
 
-        // Creating and rotating robot-centric position.
-        double r = d / dTheta;
-        Point loc = new Point(r, 0);
-        Point rot = rotateAboutOrigin(loc, dTheta);
+            // Updating global orientation.
+            theta += dTheta;
 
-        double dx1 = loc.x - rot.x;
-        double dy1 = loc.y - rot.y;
+            // Creating and rotating robot-centric position.
+            double r = d / dTheta;
+            Point loc = new Point(r, 0);
+            Point rot = rotateAboutOrigin(loc, dTheta);
+
+            dx1 = loc.x - rot.x;
+            dy1 = loc.y - rot.y;
+        }
 
         // Setting dStrafe, or the change in strafe encoder position.
-        double strafeDistance = strafeEncoder.getDistance();
-        double dStrafe = strafeDistance - prevStrafeDistance;
-        prevStrafeDistance = strafeDistance;
+        double dStrafe = strafeEncoder.getDistanceChange();
 
         // Correcting for incorrect strafe values
         double turnOffset = dTheta * strafeEncoderDistancePerRobotRotation;
